@@ -33,7 +33,7 @@ rm(list = ls(all.names = TRUE))
 
 # set the working directory where the tables to use are located
 setwd("~/Documents/2. Studies/PHD/Data/3. Proteomics/")
-rawdata <- read.delim(file = "Network and DE analysis/July 2021/raw filtered muscle 20210707.txt", check.names=FALSE, stringsAsFactors=FALSE, header = TRUE, sep = "\t", dec = ".")
+rawdata <- read.delim(file = "Network and DE analysis/July 2021/raw data/raw filtered muscle 20210707.txt", check.names=FALSE, stringsAsFactors=FALSE, header = TRUE, sep = "\t", dec = ".")
 
 # Remove every char after ; from Gene names in protein ID list
 rawdata$`Protein IDs` <- gsub(";.*", "", rawdata$`Protein IDs`)
@@ -64,7 +64,7 @@ color_vector <- rep(c("#061f5c","#061f5c","#061f5c","#061f5c", "#c42b65","#c42b6
 
 # boxplots of RAW intensities - if they get logged, NAs or inf valus can get added (that's why +1 was added earlier)
 boxplot(log10(lfq_raw), col = color_vector, 
-        notch = TRUE, main = "RAW data: Middle (blue), Old (pink), and Senior (yellow)",
+        notch = TRUE, main = "RAW data: Middle (blue), Senior (pink), and Old (yellow)",
         xlab = "LFQ Samples", ylab = "log10 of Intensity")
 
 #################################
@@ -137,8 +137,8 @@ y <- DGEList(counts = lfq_raw, group = group, genes = gene)
 
 # save the indexes of each condition
 Middle <- 1:4
-Old <- 5:7
-Senior <- 8:12
+Senior <- 5:7
+Old <- 8:12
 
 CV <- function(df) {
   # Computes CVs of data frame rows
@@ -186,9 +186,9 @@ labeled_boxplot <- function(df, ylim, title) {
 
 # make a tidy data frame for plotting
 cv_mid <- data.frame(cv = CV(lfq_raw[Middle]), age_group = "Middle", stringsAsFactors = FALSE)
-cv_old <- data.frame(cv = CV(lfq_raw[Old]), age_group = "Old", stringsAsFactors = FALSE)
 cv_sen <- data.frame(cv = CV(lfq_raw[Senior]), age_group = "Senior", stringsAsFactors = FALSE)
-cv_long <- rbind(cv_mid, cv_old, cv_sen)
+cv_old <- data.frame(cv = CV(lfq_raw[Old]), age_group = "Old", stringsAsFactors = FALSE)
+cv_long <- rbind(cv_mid, cv_sen, cv_old)
 
 # density plots
 ggplot(cv_long, aes(x = cv, fill = age_group)) +
@@ -199,7 +199,7 @@ ggplot(cv_long, aes(x = cv, fill = age_group)) +
 # Create a design matrix containing age groups between which differential expression will conclude
 design <- model.matrix(~0 + demographic$Group)
 rownames(design) <- rownames(y$samples)
-colnames(design) <- c("Middle", "Old", "Senior")
+colnames(design) <- c("Middle", "Senior", "Old")
 design
 
 # plot variance trends - for human data use 0.4 as biological coefficient of variance 
@@ -245,27 +245,27 @@ collect_results <- function(df, tt, x, xlab, y, ylab) {
 
 # compute the exact test models, p-values, FC, etc.
 # -1, 1, 0 means comparing Old to Middle
-con_old <- makeContrasts(c(-1,1,0), levels = design)
-con_old
-et <- glmQLFTest(y, contrast=con_old)
+con_sen <- makeContrasts(c(-1,1,0), levels = design)
+con_sen
+et <- glmQLFTest(y, contrast=con_sen)
 
 # see which proteins have the smallest p-values
 topTags(et)$table
 
 # make the results table 
 tt <- topTags(et, n = Inf, sort.by = "none")$table
-mid_old <- collect_results(lfq_raw, tt, Middle, "Middle", Old, "Old")
+mid_sen <- collect_results(lfq_raw, tt, Middle, "Middle", Senior, "Senior")
 
 # see how many up and down candidates (10% FDR)
 summary(decideTests(et, p.value = 0.10))
 
 # use function from limma for MD plot
-plotMD(et, main = "Middle vs Old TMM Normalized", p.value = 0.10)
+plotMD(et, main = "Middle vs Senior", p.value = 0.10)
 abline(h = c(-1, 1), col = "black")
 
 # see how many candidates are in each category
-mid_old %>% count(candidate)
-mid_old %>% count(de_genes)
+mid_sen %>% count(candidate)
+mid_sen %>% count(de_genes)
 
 enhanced_volcano <- function(results, x, y, title) {
   # makes a volcano plot
@@ -281,7 +281,7 @@ enhanced_volcano <- function(results, x, y, title) {
                   x = 'logFC',
                   xlim = c(-2.3, 2.8),
                   ylim = c(0, 3),
-                  title = 'Muscle Middle vs Senior',
+                  title = 'Muscle Middle vs Old',
                   subtitle = 'Differential expression',
                   FCcutoff = 1.0,
                   pCutoff = 1,
@@ -300,50 +300,39 @@ enhanced_volcano <- function(results, x, y, title) {
 }
 
 # enhanced volcano plot
-pdf(file = "~/Documents/2. Studies/PHD/Data/3. Proteomics/Network and DE analysis/July 2021/muscle_mid_old_volcano_20210920.pdf", width = 6, height = 7)
-enhanced_volcano(mid_old, "ave_Middle", "ave_Old", "Middle vs Old")
+pdf(file = "~/Documents/2. Studies/PHD/Data/3. Proteomics/Network and DE analysis/July 2021/muscle_mid_sen_volcano_20210928.pdf", width = 6, height = 7)
+enhanced_volcano(mid_sen, "ave_Middle", "ave_Senior", "Middle vs Senior")
 dev.off()
 
-# compare the conditions to each other
-pairs.panels(log10(lfq_tmm[c(Middle, Old)]), method = "spearman", 
-             lm = TRUE, main = "Middle vs Old")
-
 # compute the exact test models, p-values, FC, etc.
-con_sen <- makeContrasts(c(-1,0,1), levels = design)
-et_sen <- glmQLFTest(y, contrast=con_sen)
+con_old <- makeContrasts(c(-1,0,1), levels = design)
+et_old <- glmQLFTest(y, contrast=con_old)
 
 # see which proteins have the smallest p-values
-topTags(et_sen)$table
+topTags(et_old)$table
 
 # get the results table 
-tt <- topTags(et_sen, n = Inf, sort.by = "none")$table
-mid_sen <- collect_results(lfq_raw, tt, Middle, "Middle", Senior, "Senior")
-
-# check the p-value distribution
-pvalue_plots(mid_sen, 50, "Middle vs Senior")
+tt <- topTags(et_old, n = Inf, sort.by = "none")$table
+mid_old <- collect_results(lfq_raw, tt, Middle, "Middle", Old, "Old")
 
 # see how many up and down candidates (10% FDR)
-summary(decideTests(et, p.value = 0.10))
+summary(decideTests(et_old, p.value = 0.10))
 
 # use function from limma for MD plot
-plotMD(et_sen, main = "Middle vs Senior TMM Normalized", p.value = 0.10)
+plotMD(et_old, main = "Middle vs Old", p.value = 0.10)
 abline(h = c(-1, 1), col = "black")
 
 # see how many candidates are in each category
-mid_sen %>% count(candidate)
-mid_sen %>% count(de_genes)
+mid_old %>% count(candidate)
+mid_old %>% count(de_genes)
 
 
-pdf(file = "~/Documents/2. Studies/PHD/Data/3. Proteomics/Network and DE analysis/July 2021/muscle_mid_sen_volcano_20210920.pdf", width = 6, height = 7)
-enhanced_volcano(mid_sen, "ave_Middle", "ave_Senior", "Muscle Middle vs Senior")
+pdf(file = "~/Documents/2. Studies/PHD/Data/3. Proteomics/Network and DE analysis/July 2021/muscle_mid_old_volcano_20210928.pdf", width = 6, height = 7)
+enhanced_volcano(mid_old, "ave_Middle", "ave_Old", "Muscle Middle vs Old")
 dev.off()
 
-# compare the conditions to each other
-# pairs.panels(log10(lfq_tmm[c(Middle, Senior)]), method = "spearman", 
-#              lm = TRUE, main = "Middle vs Senior")
-
 # save the results file to add back to the main spreadsheet
-results <- cbind(mid_old, mid_sen)
+results <- cbind(mid_sen, mid_old)
 write.table(results, "DE_results_muscle_raw.txt", sep = "\t", row.names = FALSE, na = " ")
 
 # log the session information
